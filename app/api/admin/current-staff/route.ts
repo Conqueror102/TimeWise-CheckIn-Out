@@ -31,7 +31,17 @@ export async function GET() {
       (checkIn) => !checkOuts.some((checkOut) => checkOut.staffId === checkIn.staffId),
     )
 
-    return NextResponse.json({ currentStaff: currentlyIn })
+    return NextResponse.json(
+      { currentStaff: currentlyIn },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+          "Pragma": "no-cache",
+          "Expires": "0",
+          "Surrogate-Control": "no-store",
+        },
+      }
+    )
   } catch (error) {
     console.error("Error fetching current staff:", error)
     return NextResponse.json({ error: "Failed to fetch current staff" }, { status: 500 })
