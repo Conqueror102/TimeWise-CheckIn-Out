@@ -56,6 +56,9 @@ importers:
       lucide-react:
         specifier: ^0.294.0
         version: 0.294.0(react@18.3.1)
+      luxon:
+        specifier: ^3.6.1
+        version: 3.6.1
       mongodb:
         specifier: ^6.3.0
         version: 6.16.0(@aws-sdk/credential-providers@3.817.0)(@mongodb-js/zstd@2.0.1)(kerberos@2.2.2)(mongodb-client-encryption@6.4.0)(snappy@7.2.2)(socks@2.8.4)
@@ -2131,6 +2134,10 @@ packages:
     resolution: {integrity: sha512-V7o0/VECSGbLHn3/1O67FUgBwWB+hmzshrgDVRJQhMh8uj5D3HBuIvhuAmQTtlupILSplwIZg5FTc4tTKMA2SA==}
     peerDependencies:
       react: ^16.5.1 || ^17.0.0 || ^18.0.0
+
+  luxon@3.6.1:
+    resolution: {integrity: sha512-tJLxrKJhO2ukZ5z0gyjY1zPh3Rh88Ej9P7jNrZiHMUXHae1yvI2imgOZtL1TO8TW6biMMKfTtAOoEJANgtWBMQ==}
+    engines: {node: '>=12'}
 
   math-intrinsics@1.1.0:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
@@ -5548,6 +5555,8 @@ snapshots:
   lucide-react@0.294.0(react@18.3.1):
     dependencies:
       react: 18.3.1
+
+  luxon@3.6.1: {}
 
   math-intrinsics@1.1.0: {}
 

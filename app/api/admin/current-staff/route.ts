@@ -1,3 +1,4 @@
+import { DateTime } from "luxon"
 import { NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
 
@@ -6,27 +7,19 @@ export async function GET() {
     const client = await clientPromise
     const db = client.db("staff_checkin")
 
-    const today = new Date().toISOString().split("T")[0]
+    const startOfDay = DateTime.now().setZone("Africa/Lagos").startOf("day").toUTC().toJSDate()
+    const endOfDay = DateTime.now().setZone("Africa/Lagos").endOf("day").toUTC().toJSDate()
 
-    // Get all check-ins for today
-    const checkIns = await db
-      .collection("attendance")
-      .find({
-        date: today,
-        type: "check-in",
-      })
-      .toArray()
+    const checkIns = await db.collection("attendance").find({
+      timestamp: { $gte: startOfDay, $lte: endOfDay },
+      type: "check-in",
+    }).toArray()
 
-    // Get all check-outs for today
-    const checkOuts = await db
-      .collection("attendance")
-      .find({
-        date: today,
-        type: "check-out",
-      })
-      .toArray()
+    const checkOuts = await db.collection("attendance").find({
+      timestamp: { $gte: startOfDay, $lte: endOfDay },
+      type: "check-out",
+    }).toArray()
 
-    // Find staff who checked in but haven't checked out
     const currentlyIn = checkIns.filter(
       (checkIn) => !checkOuts.some((checkOut) => checkOut.staffId === checkIn.staffId),
     )

@@ -1,11 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { DateTime } from "luxon"
 import clientPromise from "@/lib/mongodb"
+
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const date = searchParams.get("date")
+    const dateParam = searchParams.get("date") // e.g. "2025-05-27"
     const department = searchParams.get("department")
     const lateOnly = searchParams.get("lateOnly") === "true"
 
@@ -14,8 +16,19 @@ export async function GET(request: NextRequest) {
 
     const query: any = {}
 
-    if (date) {
-      query.date = date
+    // ⏱ Replace "date" with timestamp range filtering (Lagos time normalized to UTC)
+    if (dateParam) {
+      const start = DateTime.fromISO(dateParam, { zone: "Africa/Lagos" })
+        .startOf("day")
+        .toUTC()
+        .toJSDate()
+
+      const end = DateTime.fromISO(dateParam, { zone: "Africa/Lagos" })
+        .endOf("day")
+        .toUTC()
+        .toJSDate()
+
+      query.timestamp = { $gte: start, $lte: end }
     }
 
     if (department && department !== "all") {
@@ -26,7 +39,11 @@ export async function GET(request: NextRequest) {
       query.isLate = true
     }
 
-    const logs = await db.collection("attendance").find(query).sort({ timestamp: -1 }).toArray()
+    const logs = await db
+      .collection("attendance")
+      .find(query)
+      .sort({ timestamp: -1 })
+      .toArray()
 
     return NextResponse.json({ logs })
   } catch (error) {
