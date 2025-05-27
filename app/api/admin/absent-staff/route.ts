@@ -1,40 +1,60 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { DateTime } from "luxon"
 import clientPromise from "@/lib/mongodb"
+import { DateTime } from "luxon"
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const dateParam = searchParams.get("date") || DateTime.now().setZone("Africa/Lagos").toISODate()
-
-    const start = DateTime.fromISO(dateParam, { zone: "Africa/Lagos" }).startOf("day").toUTC().toJSDate()
-    const end = DateTime.fromISO(dateParam, { zone: "Africa/Lagos" }).endOf("day").toUTC().toJSDate()
+    const date = searchParams.get("date") || DateTime.now().setZone("Africa/Lagos").toFormat("yyyy-MM-dd")
 
     const client = await clientPromise
     const db = client.db("staff_checkin")
 
-    // Get all staff
-    const allStaff = await db.collection("staff").find({}).toArray()
-
-    // Get staff who checked in on the specified date (by timestamp)
-    const checkedInStaff = await db
-      .collection("attendance")
-      .find({
-        timestamp: { $gte: start, $lte: end },
-        type: "check-in",
-      })
+    // Fetch logs for the date
+    const logs = await db.collection("attendance")
+      .find({ date })
+      .sort({ timestamp: -1 })
       .toArray()
 
-    const checkedInStaffIds = checkedInStaff.map((log) => log.staffId)
+    // Fetch all staff
+    const allStaff = await db.collection("staff").find().toArray()
+    const totalStaff = allStaff.length
 
-    // Find absent staff
-    const absentStaff = allStaff.filter((staff) => !checkedInStaffIds.includes(staff.staffId))
+    // Build latest log per staff
+    const latestLogs: Record<string, any> = {}
+    logs.forEach(log => {
+      if (!latestLogs[log.staffId]) {
+        latestLogs[log.staffId] = log
+      }
+    })
 
-    return NextResponse.json({ absentStaff, date: dateParam })
+    // Calculate currently in
+    const currentlyIn = Object.values(latestLogs).filter(log => log.type === "check-in")
+
+    // Calculate late count
+    const lateCount = logs.filter(log => log.isLate).length
+
+    // Calculate absentees
+    const presentStaffIds = new Set(logs.map(log => log.staffId))
+    const absentStaff = allStaff.filter(staff => !presentStaffIds.has(staff.staffId))
+    const absentCount = absentStaff.length
+
+    return NextResponse.json({
+      logs,
+      stats: {
+        totalStaff,
+        lateCount,
+        absentCount,
+        currentlyInCount: currentlyIn.length,
+      },
+      currentlyIn,
+      absentStaff
+    })
+
   } catch (error) {
-    console.error("Error fetching absent staff:", error)
-    return NextResponse.json({ error: "Failed to fetch absent staff" }, { status: 500 })
+    console.error("Error fetching logs:", error)
+    return NextResponse.json({ error: "Failed to fetch logs" }, { status: 500 })
   }
 }
