@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
+import { DateTime } from "luxon"
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,9 +23,10 @@ export async function POST(request: NextRequest) {
     const settings = await db.collection("settings").findOne({})
     const latenessTime = settings?.latenessTime || "09:00"
 
-    const now = new Date()
-    const currentTime = now.toISOString().slice(11, 16)
-    const currentDate = now.toISOString().split("T")[0]
+    // Use Luxon to get current date/time in Africa/Lagos timezone
+    const now = DateTime.now().setZone("Africa/Lagos")
+    const currentTime = now.toFormat("HH:mm")
+    const currentDate = now.toFormat("yyyy-MM-dd")
 
     // Check for existing attendance log for this type today
     const existingLog = await db.collection("attendance").findOne({
@@ -47,7 +49,7 @@ export async function POST(request: NextRequest) {
       staffName: staff.name,
       department: staff.department,
       type,
-      timestamp: now,
+      timestamp: now.toJSDate(),  // convert Luxon DateTime to JS Date
       date: currentDate,
       isLate: isLate || false,
     }
@@ -66,7 +68,7 @@ export async function POST(request: NextRequest) {
       message: `${type === "check-in" ? "Checked in" : "Checked out"} successfully`,
       isLate,
       staff: staff.name,
-      attendanceLogs,  // full log for today
+      attendanceLogs,
     })
   } catch (error) {
     console.error("Check-in error:", error)
