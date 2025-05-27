@@ -89,6 +89,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   const fetchCurrentStaff = async () => {
     try {
+      console.log("Fetching current staff...")
       const response = await fetch("/api/admin/current-staff")
       const data = await response.json()
       setCurrentStaff(data.currentStaff || [])
