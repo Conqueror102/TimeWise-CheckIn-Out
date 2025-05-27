@@ -214,34 +214,34 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
   }).length
 
   return (
-    <div className="web-app-container min-h-screen">
+    <div className="web-app-container min-h-screen bg-white">
       {/* Header */}
       <header className="gradient-primary shadow-lg">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
+        <div className="container mx-auto px-4 sm:px-6 py-4">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10  rounded-lg flex items-center justify-center">
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center">
                 <Image src={logo} alt="" width={200} height={200}/>
               </div>
               <div>
-                <h1 className="text-xl font-bold text-white">Admin Dashboard</h1>
-                <div className="flex items-center gap-3 text-blue-200 text-sm">
+                <h1 className="text-lg sm:text-xl font-bold text-white">Admin Dashboard</h1>
+                <div className="flex items-center gap-3 text-blue-200 text-xs sm:text-sm">
                   <span>Staff Attendance Management</span>
                   {autoRefresh && <div className="live-indicator">Live</div>}
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               <div className="text-white text-xs">Last updated: {lastUpdate.toLocaleTimeString()}</div>
-              <button onClick={fetchAllData} className="btn-outline-white flex items-center gap-1 text-sm">
+              <button onClick={fetchAllData} className="btn-outline-white flex items-center gap-1 text-xs sm:text-sm">
                 <RefreshCw className="w-4 h-4" />
                 Refresh
               </button>
-              <button onClick={exportToCSV} className="btn-outline-white flex items-center gap-1 text-sm">
+              <button onClick={exportToCSV} className="btn-outline-white flex items-center gap-1 text-xs sm:text-sm">
                 <Download className="w-4 h-4" />
                 Export
               </button>
-              <button onClick={handleLogout} className="btn-outline-white flex items-center gap-1 text-sm">
+              <button onClick={handleLogout} className="btn-outline-white flex items-center gap-1 text-xs sm:text-sm">
                 <LogOut className="w-4 h-4" />
                 Logout
               </button>
@@ -251,9 +251,9 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-6 py-8 space-y-8">
+      <main className="container mx-auto px-2 sm:px-6 py-6 sm:py-8 space-y-8">
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
           <Card className=" border-l-4 border-l-accent-teal">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
               <CardTitle className="text-sm font-medium text-gray-600">Currently Active</CardTitle>
@@ -314,7 +314,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
         </div>
 
         <Tabs defaultValue="logs" className="space-y-6">
-          <TabsList className="bg-white shadow-md border">
+          <TabsList className="bg-white shadow-md border flex flex-wrap">
             <TabsTrigger value="logs" className="data-[state=active]:bg-primary-navy data-[state=active]:text-white">
               Attendance Logs
             </TabsTrigger>
@@ -342,14 +342,14 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
           <TabsContent value="logs" className="space-y-6">
             {/* Filters */}
-            <Card className=" bg-accent-teal/15">
+            <Card className="bg-accent-teal/15">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-primary-navy">
                   <Filter className="w-5 h-5 text-accent-teal" />
                   Filter Options
                 </CardTitle>
               </CardHeader>
-              <CardContent className="flex flex-wrap gap-4">
+              <CardContent className="flex flex-col sm:flex-row flex-wrap gap-4">
                 <div className="flex items-center gap-2">
                   <Label htmlFor="date" className="text-gray-700">
                     Date:
@@ -420,7 +420,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
               </CardHeader>
               <CardContent>
                 <div className="overflow-x-auto">
-                  <table className="w-full">
+                  <table className="w-full min-w-[600px]">
                     <thead>
                       <tr className="border-b border-gray-200">
                         <th className="text-left p-4 font-semibold text-gray-700">Staff ID</th>
@@ -477,7 +477,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   {currentStaff.map((staff, index) => (
                     <div
                       key={index}
-                      className="flex justify-between items-center p-4 bg-accent-teal/5 rounded-lg border border-accent-teal/20 hover:bg-accent-teal/10 transition-colors"
+                      className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-accent-teal/5 rounded-lg border border-accent-teal/20 hover:bg-accent-teal/10 transition-colors"
                     >
                       <div>
                         <p className="font-semibold text-primary-navy">{staff.staffName}</p>
@@ -485,7 +485,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
                           {staff.department} • {staff.staffId}
                         </p>
                       </div>
-                      <div className="text-right">
+                      <div className="text-left sm:text-right mt-2 sm:mt-0">
                         <p className="text-sm text-gray-600">Checked in at</p>
                         <p className="font-mono text-sm font-medium text-primary-navy">
                           {new Date(staff.timestamp).toLocaleTimeString()}
@@ -518,7 +518,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   {absentStaff.map((staff, index) => (
                     <div
                       key={index}
-                      className="flex justify-between items-center p-4 bg-red-50 rounded-lg border border-red-200"
+                      className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-red-50 rounded-lg border border-red-200"
                     >
                       <div>
                         <p className="font-semibold text-primary-navy">{staff.name}</p>
@@ -526,7 +526,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
                           {staff.department} • {staff.position}
                         </p>
                       </div>
-                      <div className="text-right">
+                      <div className="text-left sm:text-right mt-2 sm:mt-0">
                         <p className="font-mono text-sm font-medium text-gray-700">{staff.staffId}</p>
                         <Badge className="status-absent">Absent</Badge>
                       </div>
