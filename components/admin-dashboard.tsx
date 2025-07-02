@@ -33,7 +33,13 @@ interface AdminDashboardProps {
   onLogout: () => void
 }
 
+function getCookie(name: string): string | null {
+  return document.cookie.split('; ').find(row => row.startsWith(name + '='))?.split('=')[1] || null;
+}
+
 export function AdminDashboard({ onLogout }: AdminDashboardProps) {
+  const [adminToken, setAdminToken] = useState<string | null>(getCookie("adminToken"));
+  const [isAuthenticated, setIsAuthenticated] = useState(!!adminToken);
   const [logs, setLogs] = useState<AttendanceLog[]>([])
   const [currentStaff, setCurrentStaff] = useState<AttendanceLog[]>([])
   const [absentStaff, setAbsentStaff] = useState<Staff[]>([])
@@ -46,6 +52,27 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [loading, setLoading] = useState(false)
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
   const [autoRefresh, setAutoRefresh] = useState(true)
+
+  useEffect(() => {
+    const token = getCookie("adminToken");
+    setAdminToken(token);
+    setIsAuthenticated(!!token);
+    if (token) {
+      fetchAdminData(token);
+    }
+  }, []);
+
+  async function fetchAdminData(token: string) {
+    // Example for logs
+    const logsRes = await fetch(`/api/admin/logs?date=2025-07-02`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    // Example for settings
+    const settingsRes = await fetch(`/api/admin/settings`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    // ... handle responses ...
+  }
 
   // Real-time data fetching
   const fetchAllData = useCallback(async () => {
@@ -77,7 +104,9 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
       if (filters.department !== "all") params.append("department", filters.department)
       if (filters.lateOnly) params.append("lateOnly", "true")
 
-      const response = await fetch(`/api/admin/logs?${params}`)
+      const response = await fetch(`/api/admin/logs?${params}`, {
+        headers: { 'Authorization': `Bearer ${adminToken}` }
+      })
       const data = await response.json()
       setLogs(data.logs || [])
     } catch (error) {
@@ -90,7 +119,9 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const fetchCurrentStaff = async () => {
     try {
       console.log("Fetching current staff...")
-      const response = await fetch("/api/admin/current-staff")
+      const response = await fetch("/api/admin/current-staff", {
+        headers: { 'Authorization': `Bearer ${adminToken}` }
+      })
       const data = await response.json()
       setCurrentStaff(data.currentStaff || [])
     } catch (error) {
@@ -100,7 +131,9 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   const fetchAbsentStaff = async () => {
     try {
-      const response = await fetch(`/api/admin/absent-staff?date=${filters.date}`)
+      const response = await fetch(`/api/admin/absent-staff?date=${filters.date}`, {
+        headers: { 'Authorization': `Bearer ${adminToken}` }
+      })
       const data = await response.json()
       setAbsentStaff(data.absentStaff || [])
     } catch (error) {
@@ -110,7 +143,9 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   const fetchSettings = async () => {
     try {
-      const response = await fetch("/api/admin/settings")
+      const response = await fetch("/api/admin/settings", {
+        headers: { 'Authorization': `Bearer ${adminToken}` }
+      })
       const data = await response.json()
       setSettings(data.settings || { latenessTime: "09:00", workEndTime: "17:00" })
     } catch (error) {
@@ -122,7 +157,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
     try {
       await fetch("/api/admin/settings", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", 'Authorization': `Bearer ${adminToken}` },
         body: JSON.stringify(settings),
       })
       alert("Settings updated successfully!")
