@@ -1,5 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { validateAdminPassword } from "@/lib/auth"
+import jwt from "jsonwebtoken"
+
+const JWT_SECRET = process.env.JWT_SECRET
 
 export async function POST(request: NextRequest) {
   try {
@@ -9,10 +11,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Password is required" }, { status: 400 })
     }
 
-    const isValid = validateAdminPassword(password)
+    if (!JWT_SECRET) {
+      return NextResponse.json({ error: "JWT secret not set" }, { status: 500 })
+    }
+
+    const isValid = password === process.env.ADMIN_PASSWORD
 
     if (isValid) {
-      return NextResponse.json({ success: true, message: "Login successful" })
+      const token = jwt.sign({ type: "admin" }, JWT_SECRET, { expiresIn: "2h" })
+      return NextResponse.json({ success: true, message: "Login successful", token })
     } else {
       return NextResponse.json({ error: "Invalid password" }, { status: 401 })
     }

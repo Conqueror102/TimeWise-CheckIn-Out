@@ -1,9 +1,32 @@
 import { type NextRequest, NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
 import { DateTime } from "luxon"
+import jwt from "jsonwebtoken"
+
+const JWT_SECRET = process.env.JWT_SECRET
 
 export async function POST(request: NextRequest) {
   try {
+    // Check for Authorization header
+    const authHeader = request.headers.get("authorization")
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return NextResponse.json({ error: "Unauthorized: No token provided" }, { status: 401 })
+    }
+    const token = authHeader.replace("Bearer ", "")
+    if (!JWT_SECRET) {
+      return NextResponse.json({ error: "Server misconfiguration: JWT secret missing" }, { status: 500 })
+    }
+    let payload: any
+    try {
+      payload = jwt.verify(token, JWT_SECRET)
+    } catch {
+      return NextResponse.json({ error: "Unauthorized: Invalid token" }, { status: 401 })
+    }
+    // Accept only scan or admin tokens
+    if (payload.type !== "scan" && payload.type !== "admin") {
+      return NextResponse.json({ error: "Unauthorized: Invalid token type" }, { status: 401 })
+    }
+
     const { staffId, type } = await request.json()
 
     if (!staffId || !type) {

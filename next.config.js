@@ -1,7 +1,5 @@
 const nextConfig = {
-  experimental: {
-    serverComponentsExternalPackages: ["mongodb"],
-  },
+  serverExternalPackages: ["mongodb"],
   images: {
     domains: ["localhost"],
   },
@@ -13,6 +11,9 @@ const nextConfig = {
   },
   images: {
     unoptimized: true,
+  },
+  experimental: {
+    // serverComponentsExternalPackages: ["mongodb"], // removed as it's now at root
   },
 }
 

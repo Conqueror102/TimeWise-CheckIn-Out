@@ -9,10 +9,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Shield, Eye, EyeOff, Lock, Building2 } from "lucide-react"
-import { setAdminAuthenticated } from "@/lib/auth"
 
 interface AdminLoginProps {
-  onLogin: () => void
+  onLogin: (token: string) => void
+}
+
+function setCookie(name: string, value: string, maxAgeSeconds: number) {
+  document.cookie = `${name}=${value}; path=/; max-age=${maxAgeSeconds}`;
+}
+function deleteCookie(name: string) {
+  document.cookie = `${name}=; path=/; max-age=0`;
+}
+function getCookie(name: string): string | null {
+  return document.cookie.split('; ').find(row => row.startsWith(name + '='))?.split('=')[1] || null;
 }
 
 export function AdminLogin({ onLogin }: AdminLoginProps) {
@@ -20,6 +29,7 @@ export function AdminLogin({ onLogin }: AdminLoginProps) {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [adminToken, setAdminToken] = useState<string | null>(getCookie("adminToken"))
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -37,9 +47,10 @@ export function AdminLogin({ onLogin }: AdminLoginProps) {
 
       const data = await response.json()
 
-      if (data.success) {
-        setAdminAuthenticated(true)
-        onLogin()
+      if (data.success && data.token) {
+        setAdminToken(data.token)
+        setCookie("adminToken", data.token, 7200)
+        onLogin(data.token)
       } else {
         setError(data.error || "Login failed")
       }
@@ -48,6 +59,12 @@ export function AdminLogin({ onLogin }: AdminLoginProps) {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleLogout = () => {
+    setAdminToken(null)
+    deleteCookie("adminToken")
+    // ... any other logout logic
   }
 
   return (
