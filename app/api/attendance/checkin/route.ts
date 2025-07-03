@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized: Invalid token type" }, { status: 401 })
     }
 
-    const { staffId, type } = await request.json()
+    const { staffId, type, photoUrl } = await request.json()
 
     if (!staffId || !type) {
       return NextResponse.json({ error: "Staff ID and type are required" }, { status: 400 })
@@ -75,6 +75,7 @@ export async function POST(request: NextRequest) {
       timestamp: now.toJSDate(),  // convert Luxon DateTime to JS Date
       date: currentDate,
       isLate: isLate || false,
+      ...(photoUrl ? { photoUrl } : {}),
     }
 
     // Insert new attendance log

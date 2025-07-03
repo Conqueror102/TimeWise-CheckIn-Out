@@ -28,6 +28,8 @@ import { StaffRegistration } from "./staff-registration"
 import { setAdminAuthenticated } from "@/lib/auth"
 import logo from "@/public/logo1.png"
 import Image from "next/image"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableCaption } from "@/components/ui/table"
 
 interface AdminDashboardProps {
   onLogout: () => void
@@ -35,6 +37,18 @@ interface AdminDashboardProps {
 
 function getCookie(name: string): string | null {
   return document.cookie.split('; ').find(row => row.startsWith(name + '='))?.split('=')[1] || null;
+}
+
+// Helper to group logs by staffId and date
+function groupLogsByStaffAndDate(logs) {
+  const grouped = {};
+  for (const log of logs) {
+    const key = `${log.staffId}_${log.date}`;
+    if (!grouped[key]) grouped[key] = { checkIn: null, checkOut: null, staff: log };
+    if (log.type === "check-in") grouped[key].checkIn = log;
+    if (log.type === "check-out") grouped[key].checkOut = log;
+  }
+  return Object.values(grouped);
 }
 
 export function AdminDashboard({ onLogout }: AdminDashboardProps) {
@@ -52,6 +66,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [loading, setLoading] = useState(false)
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
   const [autoRefresh, setAutoRefresh] = useState(true)
+  const [modalImage, setModalImage] = useState<string | null>(null)
 
   useEffect(() => {
     const token = getCookie("adminToken");
@@ -455,39 +470,87 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
               </CardHeader>
               <CardContent>
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[600px]">
-                    <thead>
-                      <tr className="border-b border-gray-200">
-                        <th className="text-left p-4 font-semibold text-gray-700">Staff ID</th>
-                        <th className="text-left p-4 font-semibold text-gray-700">Name</th>
-                        <th className="text-left p-4 font-semibold text-gray-700">Department</th>
-                        <th className="text-left p-4 font-semibold text-gray-700">Type</th>
-                        <th className="text-left p-4 font-semibold text-gray-700">Time</th>
-                        <th className="text-left p-4 font-semibold text-gray-700">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {logs.map((log, index) => (
-                        <tr key={index} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                          <td className="p-4 font-mono font-medium text-primary-navy">{log.staffId}</td>
-                          <td className="p-4 font-medium text-primary-navy">{log.staffName}</td>
-                          <td className="p-4 text-gray-600">{log.department}</td>
-                          <td className="p-4">
-                            <Badge
-                              variant={log.type === "check-in" ? "default" : "secondary"}
-                              className={
-                                log.type === "check-in" ? "bg-primary-navy text-white" : "bg-gray-200 text-gray-700"
-                              }
-                            >
-                              {log.type}
-                            </Badge>
-                          </td>
-                          <td className="p-4 text-gray-600">{new Date(log.timestamp).toLocaleString()}</td>
-                          <td className="p-4">{getStatusBadge(log)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <Table className="min-w-[400px] text-xs align-middle">
+                    <TableCaption>Attendance records for the selected date.</TableCaption>
+                    <TableHeader>
+                      <TableRow className="sticky top-0 bg-white z-10">
+                        <TableHead className="px-1 py-2 whitespace-nowrap">Staff ID</TableHead>
+                        <TableHead className="px-1 py-2 whitespace-nowrap">Name</TableHead>
+                        <TableHead className="px-1 py-2 whitespace-nowrap">Department</TableHead>
+                        <TableHead className="px-1 py-2 whitespace-nowrap">Check-In Time</TableHead>
+                        <TableHead className="px-1 py-2 whitespace-nowrap" style={{maxWidth: 40}}>Check-In Photo</TableHead>
+                        <TableHead className="px-1 py-2 whitespace-nowrap">Late?</TableHead>
+                        <TableHead className="px-1 py-2 whitespace-nowrap">Check-In Early?</TableHead>
+                        <TableHead className="px-1 py-2 whitespace-nowrap">Check-Out Time</TableHead>
+                        <TableHead className="px-1 py-2 whitespace-nowrap" style={{maxWidth: 40}}>Check-Out Photo</TableHead>
+                        <TableHead className="px-1 py-2 whitespace-nowrap">Check-Out Early?</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {groupLogsByStaffAndDate(logs).map((group, index) => {
+                        let checkInEarly = false;
+                        if (group.checkIn && group.checkIn.timestamp) {
+                          const checkInTime = new Date(group.checkIn.timestamp).toTimeString().slice(0, 5);
+                          checkInEarly = checkInTime < settings.latenessTime;
+                        }
+                        let checkOutEarly = false;
+                        if (group.checkOut && group.checkOut.timestamp) {
+                          const checkOutTime = new Date(group.checkOut.timestamp).toTimeString().slice(0, 5);
+                          checkOutEarly = checkOutTime < settings.workEndTime;
+                        }
+                        return (
+                          <TableRow key={index}>
+                            <TableCell className="px-1 py-2 font-mono font-medium text-primary-navy whitespace-nowrap">{group.staff.staffId}</TableCell>
+                            <TableCell className="px-1 py-2 font-medium text-primary-navy whitespace-nowrap">{group.staff.staffName}</TableCell>
+                            <TableCell className="px-1 py-2 text-gray-600 whitespace-nowrap">{group.staff.department}</TableCell>
+                            <TableCell className="px-1 py-2 text-gray-600 whitespace-nowrap">{group.checkIn ? new Date(group.checkIn.timestamp).toLocaleTimeString() : <span className="text-gray-400 text-xs">-</span>}</TableCell>
+                            <TableCell className="px-1 py-2" style={{maxWidth: 40}}>
+                              {group.checkIn && group.checkIn.photoUrl ? (
+                                <img
+                                  src={group.checkIn.photoUrl}
+                                  alt="Check-in"
+                                  className="w-6 h-6 object-cover rounded cursor-pointer border"
+                                  style={{maxWidth: 24, maxHeight: 24}}
+                                  onClick={() => setModalImage(group.checkIn.photoUrl)}
+                                />
+                              ) : (
+                                <span className="text-gray-400 text-xs">No photo</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="px-1 py-2">
+                              {group.checkIn && group.checkIn.isLate ? (
+                                <span className="inline-flex items-center gap-1 rounded-full border border-red-400 bg-red-100 text-red-700 px-2 py-1 text-xs font-semibold">Late</span>
+                              ) : <span className="text-gray-400 text-xs">-</span>}
+                            </TableCell>
+                            <TableCell className="px-1 py-2">
+                              {checkInEarly ? (
+                                <span className="inline-flex items-center gap-1 rounded-full border border-green-400 bg-green-100 text-green-700 px-2 py-1 text-xs font-semibold">Early</span>
+                              ) : <span className="text-gray-400 text-xs">-</span>}
+                            </TableCell>
+                            <TableCell className="px-1 py-2 text-gray-600 whitespace-nowrap">{group.checkOut ? new Date(group.checkOut.timestamp).toLocaleTimeString() : <span className="text-gray-400 text-xs">-</span>}</TableCell>
+                            <TableCell className="px-1 py-2" style={{maxWidth: 40}}>
+                              {group.checkOut && group.checkOut.photoUrl ? (
+                                <img
+                                  src={group.checkOut.photoUrl}
+                                  alt="Check-out"
+                                  className="w-6 h-6 object-cover rounded cursor-pointer border"
+                                  style={{maxWidth: 24, maxHeight: 24}}
+                                  onClick={() => setModalImage(group.checkOut.photoUrl)}
+                                />
+                              ) : (
+                                <span className="text-gray-400 text-xs">No photo</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="px-1 py-2">
+                              {checkOutEarly ? (
+                                <span className="inline-flex items-center gap-1 rounded-full border border-green-400 bg-green-100 text-green-700 px-2 py-1 text-xs font-semibold">Early</span>
+                              ) : <span className="text-gray-400 text-xs">-</span>}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
                   {logs.length === 0 && (
                     <div className="text-center py-12 text-gray-500">
                       No attendance records found for the selected filters.
@@ -636,6 +699,14 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
           </TabsContent>
         </Tabs>
       </main>
+
+      <Dialog open={!!modalImage} onOpenChange={() => setModalImage(null)}>
+        <DialogContent>
+          {modalImage && (
+            <img src={modalImage} alt="Check-in" className="w-full h-auto max-h-[80vh] object-contain" />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

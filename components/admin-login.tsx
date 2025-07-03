@@ -140,10 +140,7 @@ export function AdminLogin({ onLogin }: AdminLoginProps) {
               </Button>
             </form>
 
-            <div className="text-center pt-4 border-t border-gray-200">
-              <p className="text-xs text-gray-500 mb-2">Demo Credentials</p>
-              <code className="bg-gray-100 px-3 py-2 rounded-lg text-primary-dark text-sm">admin123</code>
-            </div>
+           
           </CardContent>
         </Card>
       </main>

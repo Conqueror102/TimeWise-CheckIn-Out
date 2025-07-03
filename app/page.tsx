@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -19,7 +19,26 @@ function deleteCookie(name: string) {
   document.cookie = `${name}=; path=/; max-age=0`;
 }
 function getCookie(name: string): string | null {
+  if (typeof document === "undefined") return null;
   return document.cookie.split('; ').find(row => row.startsWith(name + '='))?.split('=')[1] || null;
+}
+
+// Upload photo to /api/upload-photo and return the Cloudinary URL
+async function uploadPhotoViaApiRoute(blob: Blob) {
+  const file = new File([blob], "photo.jpg", { type: blob.type });
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch("/api/upload-photo", {
+    method: "POST",
+    body: formData,
+  });
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error("Upload API error:", errorText);
+    throw new Error("Failed to upload photo: " + errorText);
+  }
+  const data = await res.json();
+  return data.url;
 }
 
 export default function StaffCheckIn() {
@@ -32,6 +51,8 @@ export default function StaffCheckIn() {
   const [scanPassword, setScanPassword] = useState("")
   const [scanAuthError, setScanAuthError] = useState("")
   const [scanToken, setScanToken] = useState<string | null>(getCookie("scanToken"))
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
 
   useEffect(() => {
     const token = getCookie("scanToken");
@@ -39,7 +60,48 @@ export default function StaffCheckIn() {
     setScanAuth(!!token);
   }, []);
 
+  // Start camera silently
+  const startCamera = async () => {
+    if (!videoRef.current) return
+    try {
+      streamRef.current = await navigator.mediaDevices.getUserMedia({ video: true })
+      videoRef.current.srcObject = streamRef.current
+      await videoRef.current.play()
+    } catch (err) {
+      console.error("Camera error", err)
+    }
+  }
+
+  // Take a silent snapshot
+  const takeSnapshot = (): Promise<Blob | null> => {
+    return new Promise((resolve) => {
+      if (!videoRef.current) return resolve(null)
+      const video = videoRef.current
+      const canvas = document.createElement("canvas")
+      canvas.width = video.videoWidth
+      canvas.height = video.videoHeight
+      const ctx = canvas.getContext("2d")
+      if (!ctx) return resolve(null)
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+      canvas.toBlob((blob) => {
+        resolve(blob)
+      }, "image/jpeg", 0.8)
+    })
+  }
+
+  // Stop camera
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop())
+      streamRef.current = null
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null
+    }
+  }
+
   const handleCheckIn = async (id: string, type: "check-in" | "check-out") => {
+    console.log("Check-in clicked", id, type);
     if (!id.trim()) {
       setMessage("Please enter a staff ID")
       setMessageType("error")
@@ -52,14 +114,29 @@ export default function StaffCheckIn() {
     }
     setLoading(true)
     setMessage("")
+    let imageUrl = null
     try {
+      await startCamera()
+      console.log("Camera started")
+      const photoBlob = await takeSnapshot()
+      console.log("Snapshot taken", photoBlob)
+      stopCamera()
+      if (photoBlob) {
+        console.log("Uploading photo...")
+        try {
+          imageUrl = await uploadPhotoViaApiRoute(photoBlob)
+          console.log("Photo uploaded", imageUrl)
+        } catch (err) {
+          console.error("Photo upload failed", err)
+        }
+      }
       const response = await fetch("/api/attendance/checkin", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${scanToken}`,
         },
-        body: JSON.stringify({ staffId: id.trim(), type }),
+        body: JSON.stringify({ staffId: id.trim(), type, photoUrl: imageUrl }),
       })
       const data = await response.json()
       if (data.success) {
@@ -77,6 +154,7 @@ export default function StaffCheckIn() {
       setMessage("Network error. Please try again.")
       setMessageType("error")
     } finally {
+      stopCamera()
       setLoading(false)
     }
   }
@@ -197,6 +275,7 @@ export default function StaffCheckIn() {
 
   return (
     <div className="web-app-container">
+      <video ref={videoRef} style={{ display: "none" }} playsInline muted />
       {/* Header */}
       <header className="gradient-primary shadow-lg">
         <div className="container mx-auto px-6 py-4">
