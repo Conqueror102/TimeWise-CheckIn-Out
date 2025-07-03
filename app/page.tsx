@@ -82,13 +82,15 @@ export default function StaffCheckIn() {
   }
 
   const handleQRScan = (scannedId: string) => {
-    setStaffId(scannedId)
-    setShowScanner(false)
-    // Auto-focus on check-in after scan
+  setStaffId(scannedId)
+  setShowScanner(false)
+
+  if (typeof window !== 'undefined') {
     setTimeout(() => {
       const checkInBtn = document.querySelector('[data-action="check-in"]') as HTMLButtonElement
       checkInBtn?.focus()
     }, 100)
+  }
   }
 
   const handleScanAuth = async (e: React.FormEvent) => {
