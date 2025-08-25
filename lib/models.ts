@@ -13,10 +13,14 @@ export interface AttendanceLog {
   staffId: string
   staffName: string
   department: string
-  type: "check-in" | "check-out"
+  type: "check-in" | "check-out" | "absent"
   timestamp: Date
   date: string
+  time?: string  // Time in HH:MM format
   isLate?: boolean
+  photoUrl?: string  // Optional photo URL for check-in photos
+  checkInType?: "early" | "late" | "on-time"
+  checkOutType?: "early" | "on-time" | "late"  // Type of checkout (early departure, on time, or late)
 }
 
 export interface AdminSettings {

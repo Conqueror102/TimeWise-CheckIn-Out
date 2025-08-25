@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
     const dateParam = searchParams.get("date") // e.g. "2025-05-27"
     const department = searchParams.get("department")
     const lateOnly = searchParams.get("lateOnly") === "true"
+    const staffId = searchParams.get("staffId")
 
     const client = await clientPromise
     const db = client.db("staff_checkin")
@@ -59,6 +60,10 @@ export async function GET(request: NextRequest) {
 
     if (lateOnly) {
       query.isLate = true
+    }
+
+    if (staffId) {
+      query.staffId = staffId
     }
 
     const logs = await db

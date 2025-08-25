@@ -22,17 +22,50 @@ import {
   TrendingUp,
   RefreshCw,
   Timer,
+  CalendarDays,
+  XCircle,
+  ArrowLeftCircle,
 } from "lucide-react"
 import type { AttendanceLog, Staff, AdminSettings } from "@/lib/models"
+import type { ReactNode, ElementType } from "react" // For React types
+import type { LucideIcon } from 'lucide-react'
+
+// Component Props Types
+interface StaffDetailModalProps {
+  staff: Staff | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}
+
+interface CircleStatProps {
+  value: number
+  max: number
+  color: string
+  label: string
+  icon: LucideIcon
+}
+
+interface GroupedAttendanceLog {
+  checkIn: AttendanceLog | null
+  checkOut: AttendanceLog | null
+  staff: AttendanceLog
+}
 import { StaffRegistration } from "./staff-registration"
 import { setAdminAuthenticated } from "@/lib/auth"
 import logo from "@/public/logo1.png"
 import Image from "next/image"
-import { Dialog, DialogContent } from "@/components/ui/dialog"
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableCaption } from "@/components/ui/table"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog";
+import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell, TableCaption } from "@/components/ui/table"
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerClose } from "@/components/ui/drawer"
 
 interface AdminDashboardProps {
   onLogout: () => void
+}
+
+interface StaffDetailModalProps {
+  staff: Staff | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }
 
 function getCookie(name: string): string | null {
@@ -40,8 +73,14 @@ function getCookie(name: string): string | null {
 }
 
 // Helper to group logs by staffId and date
-function groupLogsByStaffAndDate(logs) {
-  const grouped = {};
+interface GroupedLog {
+  checkIn: AttendanceLog | null;
+  checkOut: AttendanceLog | null;
+  staff: AttendanceLog;
+}
+
+function groupLogsByStaffAndDate(logs: AttendanceLog[]): GroupedLog[] {
+  const grouped: { [key: string]: GroupedLog } = {};
   for (const log of logs) {
     const key = `${log.staffId}_${log.date}`;
     if (!grouped[key]) grouped[key] = { checkIn: null, checkOut: null, staff: log };
@@ -57,6 +96,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [logs, setLogs] = useState<AttendanceLog[]>([])
   const [currentStaff, setCurrentStaff] = useState<AttendanceLog[]>([])
   const [absentStaff, setAbsentStaff] = useState<Staff[]>([])
+  const [staff, setStaff] = useState<Staff[]>([])
   const [settings, setSettings] = useState<AdminSettings>({ latenessTime: "09:00", workEndTime: "17:00" })
   const [filters, setFilters] = useState({
     date: new Date().toISOString().split("T")[0],
@@ -67,26 +107,64 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [modalImage, setModalImage] = useState<string | null>(null)
+  const [search, setSearch] = useState("")
 
   useEffect(() => {
     const token = getCookie("adminToken");
     setAdminToken(token);
     setIsAuthenticated(!!token);
     if (token) {
-      fetchAdminData(token);
+      fetchAdminData(token).catch(error => {
+        console.error("Initial data fetch failed:", error);
+        setIsAuthenticated(false);
+      });
     }
   }, []);
 
   async function fetchAdminData(token: string) {
-    // Example for logs
-    const logsRes = await fetch(`/api/admin/logs?date=2025-07-02`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    // Example for settings
-    const settingsRes = await fetch(`/api/admin/settings`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    // ... handle responses ...
+    try {
+      setLoading(true);
+      const date = new Date().toISOString().split('T')[0];
+      
+      // Fetch all data in parallel with cache control headers
+      const fetchOptions = {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      };
+
+      const [logsRes, currentStaffRes, absentStaffRes, settingsRes] = await Promise.all([
+        fetch(`/api/admin/logs?date=${date}`, fetchOptions),
+        fetch('/api/admin/current-staff', fetchOptions),
+        fetch(`/api/admin/absent-staff?date=${date}`, fetchOptions),
+        fetch('/api/admin/settings', fetchOptions)
+      ]);
+
+      const [logsData, currentStaffData, absentStaffData, settingsData] = await Promise.all([
+        logsRes.json(),
+        currentStaffRes.json(),
+        absentStaffRes.json(),
+        settingsRes.json()
+      ]);
+
+      if (!logsRes.ok || !currentStaffRes.ok || !absentStaffRes.ok || !settingsRes.ok) {
+        throw new Error('One or more API requests failed');
+      }
+
+      setLogs(logsData.logs || []);
+      setCurrentStaff(currentStaffData.currentStaff || []);
+      setAbsentStaff(absentStaffData.absentStaff || []);
+      setSettings(settingsData.settings || { latenessTime: "09:00", workEndTime: "17:00" });
+      setLastUpdate(new Date());
+    } catch (error) {
+      console.error("Error fetching admin data:", error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
   }
 
   // Real-time data fetching
@@ -100,16 +178,22 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
     fetchSettings()
   }, [fetchAllData])
 
-  // Auto-refresh every 30 seconds
+  // Auto-refresh every 30 seconds if authenticated
   useEffect(() => {
-    if (!autoRefresh) return
+    if (!autoRefresh || !adminToken || !isAuthenticated) return;
 
     const interval = setInterval(() => {
-      fetchAllData()
-    }, 30000)
+      fetchAdminData(adminToken).catch(error => {
+        console.error("Auto-refresh failed:", error);
+        if (error.message === "Unauthorized") {
+          setIsAuthenticated(false);
+          clearInterval(interval);
+        }
+      });
+    }, 30000);
 
-    return () => clearInterval(interval)
-  }, [autoRefresh, fetchAllData])
+    return () => clearInterval(interval);
+  }, [autoRefresh, adminToken, isAuthenticated]);
 
   const fetchLogs = async () => {
     setLoading(true)
@@ -120,12 +204,21 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
       if (filters.lateOnly) params.append("lateOnly", "true")
 
       const response = await fetch(`/api/admin/logs?${params}`, {
-        headers: { 'Authorization': `Bearer ${adminToken}` }
+        headers: {
+          'Authorization': `Bearer ${adminToken}`,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
       })
+      if (!response.ok) {
+        throw new Error('Failed to fetch logs');
+      }
       const data = await response.json()
       setLogs(data.logs || [])
     } catch (error) {
       console.error("Error fetching logs:", error)
+      throw error;
     } finally {
       setLoading(false)
     }
@@ -135,24 +228,42 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
     try {
       console.log("Fetching current staff...")
       const response = await fetch("/api/admin/current-staff", {
-        headers: { 'Authorization': `Bearer ${adminToken}` }
+        headers: {
+          'Authorization': `Bearer ${adminToken}`,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
       })
+      if (!response.ok) {
+        throw new Error('Failed to fetch current staff');
+      }
       const data = await response.json()
       setCurrentStaff(data.currentStaff || [])
     } catch (error) {
       console.error("Error fetching current staff:", error)
+      throw error;
     }
   }
 
   const fetchAbsentStaff = async () => {
     try {
       const response = await fetch(`/api/admin/absent-staff?date=${filters.date}`, {
-        headers: { 'Authorization': `Bearer ${adminToken}` }
+        headers: {
+          'Authorization': `Bearer ${adminToken}`,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
       })
+      if (!response.ok) {
+        throw new Error('Failed to fetch absent staff');
+      }
       const data = await response.json()
       setAbsentStaff(data.absentStaff || [])
     } catch (error) {
       console.error("Error fetching absent staff:", error)
+      throw error;
     }
   }
 
@@ -374,6 +485,10 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
             <TabsTrigger value="absent" className="data-[state=active]:bg-primary-navy data-[state=active]:text-white">
               Absent Staff
             </TabsTrigger>
+            <TabsTrigger value="staff-directory" className="data-[state=active]:bg-primary-navy data-[state=active]:text-white">
+              <Users className="w-4 h-4 mr-2" />
+              Staff Directory
+            </TabsTrigger>
             <TabsTrigger
               value="register"
               className="data-[state=active]:bg-primary-navy data-[state=active]:text-white"
@@ -511,7 +626,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
                                   alt="Check-in"
                                   className="w-6 h-6 object-cover rounded cursor-pointer border"
                                   style={{maxWidth: 24, maxHeight: 24}}
-                                  onClick={() => setModalImage(group.checkIn.photoUrl)}
+                                  onClick={() => setModalImage(group.checkIn?.photoUrl || null)}
                                 />
                               ) : (
                                 <span className="text-gray-400 text-xs">No photo</span>
@@ -535,7 +650,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
                                   alt="Check-out"
                                   className="w-6 h-6 object-cover rounded cursor-pointer border"
                                   style={{maxWidth: 24, maxHeight: 24}}
-                                  onClick={() => setModalImage(group.checkOut.photoUrl)}
+                                  onClick={() => setModalImage(group.checkOut?.photoUrl || null)}
                                 />
                               ) : (
                                 <span className="text-gray-400 text-xs">No photo</span>
@@ -638,6 +753,20 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
             </Card>
           </TabsContent>
 
+          <TabsContent value="staff-directory" className="space-y-6">
+            <Card className="modern-card">
+              <CardHeader>
+                <CardTitle className="text-primary-navy">Staff Directory</CardTitle>
+                <CardDescription>
+                  {/* Show total staff count here when implemented */}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <StaffDirectoryTable />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           <TabsContent value="register">
             <Card className="modern-card">
               <CardHeader>
@@ -709,4 +838,308 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
       </Dialog>
     </div>
   )
+}
+
+function StaffDirectoryTable() {
+  const [staff, setStaff] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [selectedStaff, setSelectedStaff] = useState<Staff | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    async function fetchStaff() {
+      setLoading(true);
+      try {
+        const res = await fetch("/api/admin/staff");
+        const data = await res.json();
+        setStaff(data.staff || []);
+      } catch (err) {
+        setError("Failed to fetch staff list");
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchStaff();
+  }, []);
+
+  return (
+    <div>
+      <div className="mb-4 flex items-center gap-2">
+        <input
+          type="text"
+          placeholder="Search by name..."
+          className="border rounded px-3 py-2 w-full max-w-xs"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+      </div>
+      {loading ? (
+        <div>Loading...</div>
+      ) : error ? (
+        <div className="text-red-500">{error}</div>
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Staff ID</TableHead>
+              <TableHead>Name</TableHead>
+              <TableHead>Department</TableHead>
+              <TableHead>Position</TableHead>
+              <TableHead></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {staff
+              .filter((s: Staff) => s.name.toLowerCase().includes(search.toLowerCase()))
+              .map((s: Staff) => (
+                <TableRow key={s.staffId}>
+                  <TableCell>{s.staffId}</TableCell>
+                  <TableCell>{s.name}</TableCell>
+                  <TableCell>{s.department}</TableCell>
+                  <TableCell>{s.position}</TableCell>
+                  <TableCell>
+                    <button
+                      className="px-3 py-1 bg-primary-navy text-white rounded hover:bg-primary-navy/80"
+                      onClick={() => {
+                        setSelectedStaff(s);
+                        setModalOpen(true);
+                      }}
+                    >
+                      View Details
+                    </button>
+                  </TableCell>
+                </TableRow>
+              ))}
+          </TableBody>
+        </Table>
+      )}
+      <StaffDetailModal
+        staff={selectedStaff}
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+      />
+    </div>
+  );
+}
+
+interface CircleStatProps {
+  value: number;
+  max: number;
+  color: string;
+  label: string;
+  icon: React.ElementType;
+}
+
+function CircleStat({ value, max, color, label, icon: Icon }: CircleStatProps) {
+  const radius = 32;
+  const stroke = 8;
+  const normalizedRadius = radius - stroke / 2;
+  const circumference = 2 * Math.PI * normalizedRadius;
+  const progress = max > 0 ? value / max : 0;
+  const offset = circumference - progress * circumference;
+
+  return (
+    <div className="flex flex-col items-center" style={{ width: radius * 2 }}>
+      <div className="relative" style={{ width: radius * 2, height: radius * 2 }}>
+        <svg width={radius * 2} height={radius * 2}>
+          <circle
+            stroke="#e5e7eb"
+            fill="none"
+            strokeWidth={stroke}
+            cx={radius}
+            cy={radius}
+            r={normalizedRadius}
+          />
+          <circle
+            stroke={color}
+            fill="none"
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            cx={radius}
+            cy={radius}
+            r={normalizedRadius}
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            style={{ transition: "stroke-dashoffset 0.5s" }}
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-2xl font-bold">{value}</span>
+        </div>
+      </div>
+      <div className="flex flex-col items-center mt-2" style={{ color }}>
+        {Icon && <Icon className="w-5 h-5 mb-1" />}
+        <span className="text-xs font-medium">{label}</span>
+      </div>
+    </div>
+  );
+}
+
+function StaffDetailModal({ staff, open, onOpenChange }: StaffDetailModalProps) {
+  const [logs, setLogs] = useState<AttendanceLog[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const [sortOrder, setSortOrder] = useState("desc");
+
+  useEffect(() => {
+    if (!staff) return;
+    setLoading(true);
+    setError(null);
+    const adminToken = getCookie("adminToken");
+    fetch(`/api/admin/logs?staffId=${staff.staffId}&month=${selectedMonth}`, {
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+      },
+    })
+      .then((res) => res.json())
+      .then((data) => setLogs(data.logs || []))
+      .catch(() => setError("Failed to fetch logs"))
+      .finally(() => setLoading(false));
+  }, [staff, selectedMonth]);
+
+  // Compute stats for the selected month
+  const earlyCheckIn = logs.filter((l: AttendanceLog) => l.type === "check-in" && l.checkInType === "early").length;
+  const late = logs.filter((l: AttendanceLog) => l.type === "check-in" && l.checkInType === "late").length;
+  const present = logs.filter((l: AttendanceLog) => l.type === "check-in").length;
+  const absent = logs.filter((l: AttendanceLog) => l.type === "absent").length;
+  const earlyLeft = logs.filter((l: AttendanceLog) => l.type === "check-out" && l.checkOutType === "early").length;
+
+  // Get unique months from logs for dropdown
+  const months = Array.from(
+    new Set(logs.map((l) => l.date?.slice(0, 7)))
+  ).sort().reverse();
+
+  // Sort logs by day
+  const sortedLogs = [...logs].sort((a, b) => {
+    if (sortOrder === "asc") return a.date.localeCompare(b.date);
+    return b.date.localeCompare(a.date);
+  });
+
+  interface DailyLog {
+    checkIn?: AttendanceLog;
+    checkOut?: AttendanceLog;
+    absent?: boolean;
+  }
+
+  // Group logs by date
+  const logsByDate: { [key: string]: DailyLog } = {};
+  logs.forEach(log => {
+    const date = log.date;
+    if (!logsByDate[date]) logsByDate[date] = {};
+    if (log.type === "check-in") {
+      logsByDate[date].checkIn = log;
+    } else if (log.type === "check-out") {
+      logsByDate[date].checkOut = log;
+    } else if (log.type === "absent") {
+      logsByDate[date].absent = true;
+    }
+  });
+  const days = Object.keys(logsByDate).sort((a, b) => sortOrder === "asc" ? a.localeCompare(b) : b.localeCompare(a));
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-5xl w-[95vw] h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Staff Details</DialogTitle>
+          <DialogDescription>
+            {staff ? (
+              <>
+                <span><b>Name:</b> {staff.name}</span> | <span><b>Staff ID:</b> {staff.staffId}</span> | <span><b>Department:</b> {staff.department}</span> | <span><b>Position:</b> {staff.position}</span>
+              </>
+            ) : (
+              <span>No staff selected.</span>
+            )}
+          </DialogDescription>
+        </DialogHeader>
+        {staff && (
+          <div className="flex flex-col gap-6 mt-4">
+            {/* Stat Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 justify-items-center py-4 mb-6">
+              <CircleStat value={earlyCheckIn} max={present} color="#22c55e" label="Early Check-in" icon={CalendarDays} />
+              <CircleStat value={late} max={present} color="#ef4444" label="Late Days" icon={Clock} />
+              <CircleStat value={absent} max={logs.length} color="#eab308" label="Absent Days" icon={XCircle} />
+              <CircleStat value={earlyLeft} max={present} color="#3b82f6" label="Early Left" icon={ArrowLeftCircle} />
+            </div>
+            {/* Month Dropdown and Summary */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue placeholder="Select month" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {months.length === 0 ? (
+                      <SelectItem value={selectedMonth}>{selectedMonth}</SelectItem>
+                    ) : (
+                      months.map((m) => (
+                        <SelectItem key={m} value={m}>{m}</SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex gap-6 text-lg font-semibold">
+                <span>Total Present: {present}</span>
+                <span>Total Absent: {absent}</span>
+                <span>Total Late: {late}</span>
+              </div>
+            </div>
+            {/* Logs Table */}
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>
+                      <button onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}>Day {sortOrder === "asc" ? "↑" : "↓"}</button>
+                    </TableHead>
+                    <TableHead>Check-in Time</TableHead>
+                    <TableHead>Check-out Time</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow><TableCell colSpan={4}>Loading...</TableCell></TableRow>
+                  ) : error ? (
+                    <TableRow><TableCell colSpan={4} className="text-red-500">{error}</TableCell></TableRow>
+                  ) : days.length === 0 ? (
+                    <TableRow><TableCell colSpan={4}>No logs for this month.</TableCell></TableRow>
+                  ) : (
+                    days.map(date => {
+                      const entry = logsByDate[date];
+                      let status = "";
+                      if (entry.absent) {
+                        status = "Absent";
+                      } else if (entry.checkIn && entry.checkIn.checkInType === "late") {
+                        status = "Late";
+                      } else if (entry.checkIn && entry.checkIn.checkInType === "early") {
+                        status = "Early";
+                      }
+                      if (entry.checkOut?.checkOutType === "early") {
+                        status = status ? `${status}, Early Left` : "Early Left";
+                      }
+                      return (
+                        <TableRow key={date}>
+                          <TableCell>{date}</TableCell>
+                          <TableCell>{entry.checkIn ? entry.checkIn.time : ""}</TableCell>
+                          <TableCell>{entry.checkOut ? entry.checkOut.time : ""}</TableCell>
+                          <TableCell>{status}</TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
 }
