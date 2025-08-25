@@ -981,6 +981,7 @@ function StaffDetailModal({ staff, open, onOpenChange }: StaffDetailModalProps) 
   const [logs, setLogs] = useState<AttendanceLog[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [modalImage, setModalImage] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -1004,10 +1005,11 @@ function StaffDetailModal({ staff, open, onOpenChange }: StaffDetailModalProps) 
   }, [staff, selectedMonth]);
 
   // Compute stats for the selected month
+  const workingDays = new Set(logs.map(l => l.date)).size;  // Total unique days
   const earlyCheckIn = logs.filter((l: AttendanceLog) => l.type === "check-in" && l.checkInType === "early").length;
   const late = logs.filter((l: AttendanceLog) => l.type === "check-in" && l.checkInType === "late").length;
   const present = logs.filter((l: AttendanceLog) => l.type === "check-in").length;
-  const absent = logs.filter((l: AttendanceLog) => l.type === "absent").length;
+  const absent = workingDays - present;  // Calculate actual absences
   const earlyLeft = logs.filter((l: AttendanceLog) => l.type === "check-out" && l.checkOutType === "early").length;
 
   // Get unique months from logs for dropdown
@@ -1060,11 +1062,11 @@ function StaffDetailModal({ staff, open, onOpenChange }: StaffDetailModalProps) 
         {staff && (
           <div className="flex flex-col gap-6 mt-4">
             {/* Stat Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 justify-items-center py-4 mb-6">
-              <CircleStat value={earlyCheckIn} max={present} color="#22c55e" label="Early Check-in" icon={CalendarDays} />
-              <CircleStat value={late} max={present} color="#ef4444" label="Late Days" icon={Clock} />
-              <CircleStat value={absent} max={logs.length} color="#eab308" label="Absent Days" icon={XCircle} />
-              <CircleStat value={earlyLeft} max={present} color="#3b82f6" label="Early Left" icon={ArrowLeftCircle} />
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 justify-items-center py-4 mb-6 bg-gray-50 rounded-lg p-4">
+              <CircleStat value={earlyCheckIn} max={workingDays} color="#22c55e" label="Early Check-in" icon={CalendarDays} />
+              <CircleStat value={late} max={workingDays} color="#ef4444" label="Late Days" icon={Clock} />
+              <CircleStat value={absent} max={workingDays} color="#eab308" label="Absent Days" icon={XCircle} />
+              <CircleStat value={earlyLeft} max={workingDays} color="#3b82f6" label="Early Left" icon={ArrowLeftCircle} />
             </div>
             {/* Month Dropdown and Summary */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -1095,11 +1097,16 @@ function StaffDetailModal({ staff, open, onOpenChange }: StaffDetailModalProps) 
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>
-                      <button onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}>Day {sortOrder === "asc" ? "↑" : "↓"}</button>
+                    <TableHead className="w-[150px]">
+                      <button 
+                        className="flex items-center gap-1 hover:bg-gray-100 px-2 py-1 rounded" 
+                        onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+                      >
+                        Date {sortOrder === "asc" ? "↑" : "↓"}
+                      </button>
                     </TableHead>
-                    <TableHead>Check-in Time</TableHead>
-                    <TableHead>Check-out Time</TableHead>
+                    <TableHead className="w-[180px]">Check-in Time</TableHead>
+                    <TableHead className="w-[180px]">Check-out Time</TableHead>
                     <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1111,25 +1118,55 @@ function StaffDetailModal({ staff, open, onOpenChange }: StaffDetailModalProps) 
                   ) : days.length === 0 ? (
                     <TableRow><TableCell colSpan={4}>No logs for this month.</TableCell></TableRow>
                   ) : (
-                    days.map(date => {
+                    days.map((date) => {
                       const entry = logsByDate[date];
-                      let status = "";
-                      if (entry.absent) {
-                        status = "Absent";
-                      } else if (entry.checkIn && entry.checkIn.checkInType === "late") {
-                        status = "Late";
-                      } else if (entry.checkIn && entry.checkIn.checkInType === "early") {
-                        status = "Early";
-                      }
-                      if (entry.checkOut?.checkOutType === "early") {
-                        status = status ? `${status}, Early Left` : "Early Left";
-                      }
                       return (
                         <TableRow key={date}>
                           <TableCell>{date}</TableCell>
-                          <TableCell>{entry.checkIn ? entry.checkIn.time : ""}</TableCell>
-                          <TableCell>{entry.checkOut ? entry.checkOut.time : ""}</TableCell>
-                          <TableCell>{status}</TableCell>
+                          <TableCell>
+                            {entry.checkIn ? (
+                              <div className="flex items-center gap-2">
+                                {new Date(entry.checkIn.timestamp).toLocaleTimeString()}
+                                {entry.checkIn.photoUrl && (
+                                  <button
+                                    className="text-blue-500 hover:text-blue-700"
+                                    onClick={() => setModalImage(entry.checkIn?.photoUrl || null)}
+                                  >
+                                    📷
+                                  </button>
+                                )}
+                              </div>
+                            ) : entry.absent ? "Absent" : "-"}
+                          </TableCell>
+                          <TableCell>
+                            {entry.checkOut ? (
+                              <div className="flex items-center gap-2">
+                                {new Date(entry.checkOut.timestamp).toLocaleTimeString()}
+                                {entry.checkOut.photoUrl && (
+                                  <button
+                                    className="text-blue-500 hover:text-blue-700"
+                                    onClick={() => setModalImage(entry.checkOut?.photoUrl || null)}
+                                  >
+                                    📷
+                                  </button>
+                                )}
+                              </div>
+                            ) : entry.checkIn ? "Not checked out" : "-"}
+                          </TableCell>
+                          <TableCell>
+                            {entry.absent ? (
+                              <Badge variant="destructive">Absent</Badge>
+                            ) : entry.checkIn?.checkInType === "late" ? (
+                              <Badge variant="destructive">Late</Badge>
+                            ) : entry.checkIn?.checkInType === "early" ? (
+                              <Badge variant="secondary" className="bg-green-100 text-green-800">Early</Badge>
+                            ) : entry.checkIn ? (
+                              <Badge variant="secondary" className="bg-green-100 text-green-800">On Time</Badge>
+                            ) : null}
+                            {entry.checkOut?.checkOutType === "early" && (
+                              <Badge variant="secondary" className="ml-2 bg-yellow-100 text-yellow-800">Left Early</Badge>
+                            )}
+                          </TableCell>
                         </TableRow>
                       );
                     })
@@ -1137,6 +1174,24 @@ function StaffDetailModal({ staff, open, onOpenChange }: StaffDetailModalProps) 
                 </TableBody>
               </Table>
             </div>
+
+            {/* Image Preview Dialog */}
+            <Dialog open={!!modalImage} onOpenChange={() => setModalImage(null)}>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Photo</DialogTitle>
+                </DialogHeader>
+                {modalImage && (
+                  <div className="relative aspect-video">
+                    <img
+                      src={modalImage}
+                      alt="Attendance Photo"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                )}
+              </DialogContent>
+            </Dialog>
           </div>
         )}
       </DialogContent>
