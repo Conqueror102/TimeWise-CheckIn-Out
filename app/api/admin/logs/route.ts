@@ -1,10 +1,32 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { DateTime } from "luxon"
 import clientPromise from "@/lib/mongodb"
+import jwt from "jsonwebtoken"
+
+const JWT_SECRET = process.env.JWT_SECRET
+
+function verifyAdminToken(request: NextRequest) {
+  const authHeader = request.headers.get("authorization")
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return null
+  }
+  const token = authHeader.replace("Bearer ", "")
+  if (!JWT_SECRET) return null
+  try {
+    const payload = jwt.verify(token, JWT_SECRET)
+    if (typeof payload === "object" && payload.type === "admin") {
+      return payload
+    }
+  } catch {}
+  return null
+}
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
+  if (!verifyAdminToken(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
   try {
     const { searchParams } = new URL(request.url)
     const dateParam = searchParams.get("date") // e.g. "2025-05-27"

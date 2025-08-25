@@ -12,12 +12,32 @@ import { EnhancedQRScanner } from "@/components/enhanced-qr-scanner"
 import logo from "@/public/logo1.png"
 import Image from "next/image"
 
+function setCookie(name: string, value: string, maxAgeSeconds: number) {
+  document.cookie = `${name}=${value}; path=/; max-age=${maxAgeSeconds}`;
+}
+function deleteCookie(name: string) {
+  document.cookie = `${name}=; path=/; max-age=0`;
+}
+function getCookie(name: string): string | null {
+  return document.cookie.split('; ').find(row => row.startsWith(name + '='))?.split('=')[1] || null;
+}
+
 export default function StaffCheckIn() {
   const [staffId, setStaffId] = useState("")
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState("")
   const [messageType, setMessageType] = useState<"success" | "error" | "warning">("success")
   const [showScanner, setShowScanner] = useState(false)
+  const [scanAuth, setScanAuth] = useState(false)
+  const [scanPassword, setScanPassword] = useState("")
+  const [scanAuthError, setScanAuthError] = useState("")
+  const [scanToken, setScanToken] = useState<string | null>(getCookie("scanToken"))
+
+  useEffect(() => {
+    const token = getCookie("scanToken");
+    setScanToken(token);
+    setScanAuth(!!token);
+  }, []);
 
   const handleCheckIn = async (id: string, type: "check-in" | "check-out") => {
     if (!id.trim()) {
@@ -25,29 +45,29 @@ export default function StaffCheckIn() {
       setMessageType("error")
       return
     }
-
+    if (!scanToken) {
+      setMessage("Not authenticated. Please enter the password.")
+      setMessageType("error")
+      return
+    }
     setLoading(true)
     setMessage("")
-
     try {
       const response = await fetch("/api/attendance/checkin", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Authorization": `Bearer ${scanToken}`,
         },
         body: JSON.stringify({ staffId: id.trim(), type }),
       })
-
       const data = await response.json()
-
       if (data.success) {
         setMessage(
           `${data.staff} ${type === "check-in" ? "checked in" : "checked out"} successfully${data.isLate ? " (Late)" : ""}`,
         )
         setMessageType(data.isLate ? "warning" : "success")
-        // Clear the input after successful check-in/out
         setStaffId("")
-        // Close scanner if open
         setShowScanner(false)
       } else {
         setMessage(data.error || `${type} failed`)
@@ -71,6 +91,39 @@ export default function StaffCheckIn() {
       checkInBtn?.focus()
     }, 100)
   }
+  }
+
+  const handleScanAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setScanAuthError("");
+    try {
+      const res = await fetch("/api/scan-auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: scanPassword }),
+      });
+      const data = await res.json();
+      if (data.success && data.token) {
+        setScanToken(data.token);
+        setCookie("scanToken", data.token, 7200);
+        setScanAuth(true);
+        setScanAuthError("");
+      } else {
+        setScanAuthError("Invalid password");
+      }
+    } catch {
+      setScanAuthError("Network error. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleScanLogout = () => {
+    setScanToken(null);
+    deleteCookie("scanToken");
+    setScanAuth(false);
+    // ... any other logout logic
   }
 
   const getMessageIcon = () => {
@@ -102,6 +155,47 @@ export default function StaffCheckIn() {
       return () => clearTimeout(timer)
     }
   }, [message])
+
+  if (!scanAuth) {
+    return (
+      <div className="web-app-container flex items-center justify-center min-h-screen">
+        <Card className="w-full max-w-md glass-card shadow-xl animate-slide-up">
+          <CardHeader className="text-center space-y-4 pb-6">
+            <CardTitle className="text-2xl font-bold text-primary-dark">Enter Access Password</CardTitle>
+            <CardDescription className="text-gray-600">
+              This screen is protected. Please enter the password to continue.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <form onSubmit={handleScanAuth} className="space-y-6">
+              <div className="space-y-3">
+                <Label htmlFor="scanPassword" className="text-sm font-medium text-gray-700">
+                  Password
+                </Label>
+                <Input
+                  id="scanPassword"
+                  type="password"
+                  placeholder="Enter password"
+                  value={scanPassword}
+                  onChange={(e) => setScanPassword(e.target.value)}
+                  className="h-12 border-2 border-gray-200 focus:border-accent-teal focus:ring-accent-teal/20"
+                  required
+                />
+              </div>
+              {scanAuthError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{scanAuthError}</AlertDescription>
+                </Alert>
+              )}
+              <Button type="submit" className="w-full primary-button h-12 font-semibold" disabled={loading}>
+                {loading ? "Authenticating..." : "Access Check-In"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="web-app-container">
